@@ -1,1 +1,430 @@
-v
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Affan Papa Tool</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; display: flex; justify-content: center; align-items: center; padding: 20px; }
+        .container { background: #1e293b; border-radius: 20px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5); max-width: 900px; width: 100%; overflow: hidden; border: 1px solid #334155; }
+        .header { background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); color: white; padding: 30px; text-align: center; }
+        .header h1 { font-size: 2.2em; margin-bottom: 5px; font-weight: 800; letter-spacing: 1px; }
+        .header p { font-size: 1em; opacity: 0.9; }
+        
+        .tabs { display: flex; background: #0f172a; border-bottom: 2px solid #334155; }
+        .tab { flex: 1; padding: 15px; text-align: center; cursor: pointer; font-size: 1em; font-weight: 600; color: #94a3b8; transition: all 0.3s; border: none; background: transparent; }
+        .tab:hover { color: #e2e8f0; background: #1e293b; }
+        .tab.active { color: #3b82f6; border-bottom: 3px solid #3b82f6; background: #1e293b; }
+
+        .tab-content { display: none; padding: 30px; animation: fadeIn 0.4s; }
+        .tab-content.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .form-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; font-weight: 600; color: #cbd5e1; font-size: 0.95em; }
+        input[type="text"], input[type="number"], textarea, select { width: 100%; padding: 12px 15px; background: #0f172a; border: 2px solid #334155; border-radius: 10px; font-size: 1em; color: #e2e8f0; transition: all 0.3s; }
+        input:focus, textarea:focus, select:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2); }
+        textarea { resize: vertical; min-height: 100px; }
+
+        button { background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); color: white; padding: 14px 20px; border: none; border-radius: 10px; font-size: 1em; font-weight: 700; cursor: pointer; width: 100%; transition: all 0.3s; }
+        button:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(59, 130, 246, 0.4); }
+        button:disabled { background: #475569; cursor: not-allowed; transform: none; box-shadow: none; }
+        .btn-danger { background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%); }
+        .btn-success { background: linear-gradient(135deg, #10b981 0%, #047857 100%); }
+
+        .result { margin-top: 20px; padding: 15px; border-radius: 10px; display: none; font-size: 0.95em; }
+        .result.success { background: rgba(16, 185, 129, 0.1); border: 1px solid #10b981; color: #34d399; }
+        .result.error { background: rgba(239, 68, 68, 0.1); border: 1px solid #ef4444; color: #f87171; }
+        
+        .pairing-box { text-align: center; margin-top: 20px; display: none; }
+        .pairing-code { font-size: 2.5em; font-weight: 900; letter-spacing: 5px; color: #3b82f6; margin: 15px 0; background: #0f172a; padding: 15px; border-radius: 10px; border: 2px dashed #3b82f6; }
+        
+        .session-bar { background: #0f172a; padding: 15px; border-radius: 10px; border-left: 4px solid #3b82f6; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+        .session-bar strong { color: #3b82f6; }
+        
+        .flex-row { display: flex; gap: 10px; }
+        .flex-row button { flex: 1; }
+
+        .logs-table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 0.9em; }
+        .logs-table th, .logs-table td { padding: 12px; text-align: left; border-bottom: 1px solid #334155; }
+        .logs-table th { background: #0f172a; color: #94a3b8; font-weight: 600; }
+        .logs-table tr:hover { background: #0f172a; }
+        
+        .badge { padding: 4px 10px; border-radius: 20px; font-size: 0.8em; font-weight: 600; }
+        .badge.online { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+        .badge.offline { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>THE MOST WANTED AFFAN PAPA TOOL</h1>
+            <p>WhatsApp Server Online</p>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('dashboard', this)">🚀 Dashboard</button>
+            <button class="tab" onclick="switchTab('logs', this)">📜 Logs</button>
+            <button class="tab" onclick="switchTab('sessions', this)">📱 Sessions</button>
+        </div>
+
+        <!-- DASHBOARD TAB -->
+        <div id="dashboard-tab" class="tab-content active">
+            
+            <!-- Login Section -->
+            <div id="loginSection">
+                <div class="form-group">
+                    <label for="phoneNumber">Phone Number (with country code):</label>
+                    <input type="text" id="phoneNumber" placeholder="e.g., 919876543210">
+                </div>
+                <button id="loginBtn" onclick="connectWA()">🔗 Connect WhatsApp (Generate OTP)</button>
+                
+                <div id="loginResult" class="result"></div>
+
+                <div id="pairingBox" class="pairing-box">
+                    <h3>🔐 Pairing Code</h3>
+                    <div id="pairingCodeDisplay" class="pairing-code">...</div>
+                    <p>WhatsApp → Settings → Linked Devices → Link a Device</p>
+                </div>
+            </div>
+
+            <!-- Automation Section -->
+            <div id="automationSection" style="display: none;">
+                <div class="session-bar">
+                    <div>Connected Session: <strong id="displaySessionId">-</strong></div>
+                    <button style="width: auto; padding: 8px 15px; font-size: 0.8em;" onclick="logoutSession()">Change Number</button>
+                </div>
+
+                <div class="form-group">
+                    <label for="target">Target (Group ID or Phone Number):</label>
+                    <div class="flex-row">
+                        <input type="text" id="target" placeholder="e.g., 120363XXXXXX@g.us or 919876543210">
+                        <button class="btn-success" style="width: auto; padding: 0 20px;" onclick="fetchGroups()">📋 Fetch Groups</button>
+                    </div>
+                    <select id="groupSelect" style="display: none; margin-top: 10px;" onchange="document.getElementById('target').value = this.value">
+                        <option value="">-- Select a group --</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="prefix">Prefix (Optional):</label>
+                    <input type="text" id="prefix" placeholder="e.g., Hello">
+                </div>
+
+                <div class="form-group">
+                    <label for="messages">Messages (Each line = separate message):</label>
+                    <textarea id="messages" placeholder="Good morning&#10;Hello bhai&#10;Kya haal hai"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="speed">Delay between messages (seconds):</label>
+                    <input type="number" id="speed" min="1" value="5">
+                </div>
+
+                <div class="flex-row">
+                    <button class="btn-success" onclick="startAutomation()">🚀 Start Automation</button>
+                    <button class="btn-danger" onclick="stopAutomation()">⏹️ Stop Automation</button>
+                </div>
+                <div id="automationResult" class="result"></div>
+            </div>
+        </div>
+
+        <!-- LOGS TAB -->
+        <div id="logs-tab" class="tab-content">
+            <button onclick="loadLogs()" style="margin-bottom: 15px;">🔄 Refresh Logs</button>
+            <div style="overflow-x: auto;">
+                <table class="logs-table">
+                    <thead>
+                        <tr>
+                            <th>Target</th>
+                            <th>Message</th>
+                            <th>Time</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logsTableBody">
+                        <tr><td colspan="3" style="text-align: center;">No logs found.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- SESSIONS TAB -->
+        <div id="sessions-tab" class="tab-content">
+            <button onclick="loadSessions()" style="margin-bottom: 15px;">🔄 Refresh Sessions</button>
+            <div id="sessionsList">
+                <p style="text-align: center; color: #94a3b8;">Loading sessions...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = window.location.origin;
+        let currentSessionId = null;
+        let pollInterval = null;
+
+        // Tab Switching
+        function switchTab(tabId, btn) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById(tabId + '-tab').classList.add('active');
+            
+            if (tabId === 'logs') loadLogs();
+            if (tabId === 'sessions') loadSessions();
+        }
+
+        // Connect WhatsApp (Login)
+        async function connectWA() {
+            const phone = document.getElementById('phoneNumber').value.trim();
+            if (!phone) return alert('Please enter phone number!');
+
+            const btn = document.getElementById('loginBtn');
+            const result = document.getElementById('loginResult');
+            
+            btn.disabled = true;
+            result.style.display = 'none';
+            document.getElementById('pairingBox').style.display = 'none';
+
+            try {
+                const res = await fetch(`${API_URL}/api/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    currentSessionId = data.sessionId;
+                    result.className = 'result success';
+                    result.style.display = 'block';
+                    result.innerHTML = `✅ Session created. Waiting for pairing code...`;
+                    
+                    // Start Polling for Pairing Code
+                    let attempts = 0;
+                    if (pollInterval) clearInterval(pollInterval);
+                    
+                    pollInterval = setInterval(async () => {
+                        attempts++;
+                        if (attempts > 20) { // 60 seconds timeout
+                            clearInterval(pollInterval);
+                            result.className = 'result error';
+                            result.innerHTML = `❌ Timeout: Could not generate pairing code.`;
+                            btn.disabled = false;
+                        }
+
+                        const pollRes = await fetch(`${API_URL}/api/pairing-code/${currentSessionId}`);
+                        const pollData = await pollRes.json();
+
+                        if (pollData.success && pollData.status === 'ready') {
+                            clearInterval(pollInterval);
+                            document.getElementById('pairingBox').style.display = 'block';
+                            document.getElementById('pairingCodeDisplay').textContent = pollData.pairingCode;
+                            result.style.display = 'none';
+                            btn.disabled = false;
+                            
+                            // Check connection status
+                            checkConnectionStatus();
+                        } else if (pollData.status === 'error') {
+                            clearInterval(pollInterval);
+                            result.className = 'result error';
+                            result.innerHTML = `❌ Error: ${pollData.message}`;
+                            btn.disabled = false;
+                        }
+                    }, 3000);
+
+                } else {
+                    result.className = 'result error';
+                    result.style.display = 'block';
+                    result.innerHTML = `❌ ${data.message}`;
+                    btn.disabled = false;
+                }
+            } catch (error) {
+                result.className = 'result error';
+                result.style.display = 'block';
+                result.innerHTML = `❌ ${error.message}`;
+                btn.disabled = false;
+            }
+        }
+
+        // Check if connected after pairing code
+        async function checkConnectionStatus() {
+            const checkInterval = setInterval(async () => {
+                try {
+                    const res = await fetch(`${API_URL}/api/sessions`);
+                    const data = await res.json();
+                    if (data.success) {
+                        const session = data.sessions.find(s => s.id === currentSessionId);
+                        if (session && session.isConnected === 1) {
+                            clearInterval(checkInterval);
+                            document.getElementById('loginSection').style.display = 'none';
+                            document.getElementById('automationSection').style.display = 'block';
+                            document.getElementById('displaySessionId').textContent = session.phone;
+                        }
+                    }
+                } catch (e) {}
+            }, 3000);
+        }
+
+        // Logout / Change Number
+        function logoutSession() {
+            if (confirm('Are you sure you want to change number? (You may need to re-scan)')) {
+                currentSessionId = null;
+                document.getElementById('loginSection').style.display = 'block';
+                document.getElementById('automationSection').style.display = 'none';
+                document.getElementById('pairingBox').style.display = 'none';
+                document.getElementById('loginBtn').disabled = false;
+                document.getElementById('phoneNumber').value = '';
+            }
+        }
+
+        // Fetch Groups
+        async function fetchGroups() {
+            if (!currentSessionId) return alert('No session active');
+            const select = document.getElementById('groupSelect');
+            select.innerHTML = '<option value="">Loading groups...</option>';
+            select.style.display = 'block';
+
+            try {
+                const res = await fetch(`${API_URL}/api/groups/${currentSessionId}`);
+                const data = await res.json();
+
+                if (data.success) {
+                    select.innerHTML = '<option value="">-- Select a group --</option>';
+                    data.groups.forEach(group => {
+                        const opt = document.createElement('option');
+                        opt.value = group.id;
+                        opt.textContent = group.subject;
+                        select.appendChild(opt);
+                    });
+                } else {
+                    alert('Error fetching groups: ' + data.message);
+                    select.style.display = 'none';
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+                select.style.display = 'none';
+            }
+        }
+
+        // Start Automation
+        async function startAutomation() {
+            const target = document.getElementById('target').value.trim();
+            const prefix = document.getElementById('prefix').value.trim();
+            const messagesText = document.getElementById('messages').value.trim();
+            const speed = document.getElementById('speed').value;
+            const result = document.getElementById('automationResult');
+
+            if (!target || !messagesText) {
+                return alert('Target and Messages are required!');
+            }
+
+            const messages = messagesText.split('\n').map(m => m.trim()).filter(m => m.length > 0);
+
+            try {
+                const res = await fetch(`${API_URL}/api/start-automation`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sessionId: currentSessionId,
+                        target,
+                        prefix,
+                        messages,
+                        speed
+                    })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    result.className = 'result success';
+                    result.style.display = 'block';
+                    result.innerHTML = `✅ ${data.message}<br>Delay: ${data.delay} seconds`;
+                } else {
+                    result.className = 'result error';
+                    result.style.display = 'block';
+                    result.innerHTML = `❌ ${data.message}`;
+                }
+            } catch (error) {
+                result.className = 'result error';
+                result.style.display = 'block';
+                result.innerHTML = `❌ ${error.message}`;
+            }
+        }
+
+        // Stop Automation
+        async function stopAutomation() {
+            if (!currentSessionId) return;
+            try {
+                const res = await fetch(`${API_URL}/api/stop-automation`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sessionId: currentSessionId })
+                });
+                const data = await res.json();
+                alert(data.message);
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        // Load Logs
+        async function loadLogs() {
+            if (!currentSessionId) {
+                document.getElementById('logsTableBody').innerHTML = '<tr><td colspan="3" style="text-align: center;">Please connect a session first.</td></tr>';
+                return;
+            }
+            try {
+                const res = await fetch(`${API_URL}/api/logs/${currentSessionId}`);
+                const data = await res.json();
+                const tbody = document.getElementById('logsTableBody');
+
+                if (data.success && data.logs.length > 0) {
+                    tbody.innerHTML = data.logs.map(log => `
+                        <tr>
+                            <td>${log.target}</td>
+                            <td>${log.message}</td>
+                            <td>${new Date(log.sentAt).toLocaleString()}</td>
+                        </tr>
+                    `).join('');
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="3" style="text-align: center;">No logs found.</td></tr>';
+                }
+            } catch (error) {
+                console.error(error);
+            }
+        }
+
+        // Load Sessions
+        async function loadSessions() {
+            try {
+                const res = await fetch(`${API_URL}/api/sessions`);
+                const data = await res.json();
+                const list = document.getElementById('sessionsList');
+
+                if (data.success && data.sessions.length > 0) {
+                    list.innerHTML = data.sessions.map(session => `
+                        <div class="session-bar" style="margin-bottom: 10px;">
+                            <div>
+                                <strong>${session.phone}</strong><br>
+                                <small style="color: #94a3b8;">ID: ${session.id}</small>
+                            </div>
+                            <div>
+                                <span class="badge ${session.isConnected === 1 ? 'online' : 'offline'}">
+                                    ${session.isConnected === 1 ? '🟢 Connected' : '🔴 Disconnected'}
+                                </span>
+                                <div style="margin-top: 5px; font-size: 0.8em; text-align: right; color: #94a3b8;">
+                                    Sent: ${session.sentCount}
+                                </div>
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    list.innerHTML = '<p style="text-align: center; color: #94a3b8;">No sessions found.</p>';
+                }
+            } catch (error) {
+                console.error(error);
+            }
+        }
+    </script>
+</body>
+</html>
