@@ -37,8 +37,8 @@
         .result.success { background: rgba(16, 185, 129, 0.1); border: 1px solid #10b981; color: #34d399; }
         .result.error { background: rgba(239, 68, 68, 0.1); border: 1px solid #ef4444; color: #f87171; }
         
-        .pairing-box { text-align: center; margin-top: 20px; display: none; }
-        .pairing-code { font-size: 2.5em; font-weight: 900; letter-spacing: 5px; color: #3b82f6; margin: 15px 0; background: #0f172a; padding: 15px; border-radius: 10px; border: 2px dashed #3b82f6; }
+        .qr-box { text-align: center; margin-top: 20px; display: none; }
+        .qr-image { width: 250px; height: 250px; border-radius: 15px; border: 4px solid #3b82f6; background: white; padding: 10px; margin: 15px 0; }
         
         .session-bar { background: #0f172a; padding: 15px; border-radius: 10px; border-left: 4px solid #3b82f6; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
         .session-bar strong { color: #3b82f6; }
@@ -78,14 +78,15 @@
                     <label for="phoneNumber">Phone Number (with country code):</label>
                     <input type="text" id="phoneNumber" placeholder="e.g., 919876543210">
                 </div>
-                <button id="loginBtn" onclick="connectWA()">🔗 Connect WhatsApp (Generate OTP)</button>
+                <button id="loginBtn" onclick="connectWA()">🔗 Connect WhatsApp (Generate QR)</button>
                 
                 <div id="loginResult" class="result"></div>
 
-                <div id="pairingBox" class="pairing-box">
-                    <h3>🔐 Pairing Code</h3>
-                    <div id="pairingCodeDisplay" class="pairing-code">...</div>
-                    <p>WhatsApp → Settings → Linked Devices → Link a Device</p>
+                <div id="qrBox" class="qr-box">
+                    <h3>📱 Scan QR Code</h3>
+                    <img id="qrImage" class="qr-image" src="" style="display:none;" />
+                    <p id="qrLoadingText" style="color:#3b82f6; font-weight:bold;">Loading QR...</p>
+                    <p style="font-size:0.9em; margin-top:10px;">WhatsApp → Settings → Linked Devices → Link a Device</p>
                 </div>
             </div>
 
@@ -100,7 +101,7 @@
                     <label for="target">Target (Group ID or Phone Number):</label>
                     <div class="flex-row">
                         <input type="text" id="target" placeholder="e.g., 120363XXXXXX@g.us or 919876543210">
-                        <button class="btn-success" style="width: auto; padding: 0 20px;" onclick="fetchGroups()">📋 Fetch Groups</button>
+                        <button class="btn-success" style="width: auto; padding: 0 20px;" onclick="fetchGroups()">📋 Groups</button>
                     </div>
                     <select id="groupSelect" style="display: none; margin-top: 10px;" onchange="document.getElementById('target').value = this.value">
                         <option value="">-- Select a group --</option>
@@ -163,7 +164,6 @@
         let currentSessionId = null;
         let pollInterval = null;
 
-        // Tab Switching
         function switchTab(tabId, btn) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
@@ -174,7 +174,6 @@
             if (tabId === 'sessions') loadSessions();
         }
 
-        // Connect WhatsApp (Login)
         async function connectWA() {
             const phone = document.getElementById('phoneNumber').value.trim();
             if (!phone) return alert('Please enter phone number!');
@@ -184,7 +183,7 @@
             
             btn.disabled = true;
             result.style.display = 'none';
-            document.getElementById('pairingBox').style.display = 'none';
+            document.getElementById('qrBox').style.display = 'none';
 
             try {
                 const res = await fetch(`${API_URL}/api/login`, {
@@ -198,38 +197,36 @@
                     currentSessionId = data.sessionId;
                     result.className = 'result success';
                     result.style.display = 'block';
-                    result.innerHTML = `✅ Session created. Waiting for pairing code...`;
+                    result.innerHTML = `✅ Session created. Waiting for QR code...`;
                     
-                    // Start Polling for Pairing Code
+                    // Polling for QR
                     let attempts = 0;
                     if (pollInterval) clearInterval(pollInterval);
                     
                     pollInterval = setInterval(async () => {
                         attempts++;
-                        if (attempts > 20) { // 60 seconds timeout
+                        if (attempts > 30) {
                             clearInterval(pollInterval);
                             result.className = 'result error';
-                            result.innerHTML = `❌ Timeout: Could not generate pairing code.`;
+                            result.innerHTML = `❌ Timeout: Could not generate QR code.`;
                             btn.disabled = false;
                         }
 
-                        const pollRes = await fetch(`${API_URL}/api/pairing-code/${currentSessionId}`);
+                        const pollRes = await fetch(`${API_URL}/api/qr/${currentSessionId}`);
                         const pollData = await pollRes.json();
 
                         if (pollData.success && pollData.status === 'ready') {
-                            clearInterval(pollInterval);
-                            document.getElementById('pairingBox').style.display = 'block';
-                            document.getElementById('pairingCodeDisplay').textContent = pollData.pairingCode;
+                            document.getElementById('qrBox').style.display = 'block';
+                            const img = document.getElementById('qrImage');
+                            const loadingText = document.getElementById('qrLoadingText');
+                            
+                            img.src = pollData.qrCode;
+                            img.style.display = 'block';
+                            loadingText.style.display = 'none';
                             result.style.display = 'none';
                             btn.disabled = false;
                             
-                            // Check connection status
                             checkConnectionStatus();
-                        } else if (pollData.status === 'error') {
-                            clearInterval(pollInterval);
-                            result.className = 'result error';
-                            result.innerHTML = `❌ Error: ${pollData.message}`;
-                            btn.disabled = false;
                         }
                     }, 3000);
 
@@ -247,7 +244,6 @@
             }
         }
 
-        // Check if connected after pairing code
         async function checkConnectionStatus() {
             const checkInterval = setInterval(async () => {
                 try {
@@ -257,6 +253,7 @@
                         const session = data.sessions.find(s => s.id === currentSessionId);
                         if (session && session.isConnected === 1) {
                             clearInterval(checkInterval);
+                            clearInterval(pollInterval);
                             document.getElementById('loginSection').style.display = 'none';
                             document.getElementById('automationSection').style.display = 'block';
                             document.getElementById('displaySessionId').textContent = session.phone;
@@ -266,19 +263,17 @@
             }, 3000);
         }
 
-        // Logout / Change Number
         function logoutSession() {
-            if (confirm('Are you sure you want to change number? (You may need to re-scan)')) {
+            if (confirm('Are you sure you want to change number?')) {
                 currentSessionId = null;
                 document.getElementById('loginSection').style.display = 'block';
                 document.getElementById('automationSection').style.display = 'none';
-                document.getElementById('pairingBox').style.display = 'none';
+                document.getElementById('qrBox').style.display = 'none';
                 document.getElementById('loginBtn').disabled = false;
                 document.getElementById('phoneNumber').value = '';
             }
         }
 
-        // Fetch Groups
         async function fetchGroups() {
             if (!currentSessionId) return alert('No session active');
             const select = document.getElementById('groupSelect');
@@ -307,7 +302,6 @@
             }
         }
 
-        // Start Automation
         async function startAutomation() {
             const target = document.getElementById('target').value.trim();
             const prefix = document.getElementById('prefix').value.trim();
@@ -315,9 +309,7 @@
             const speed = document.getElementById('speed').value;
             const result = document.getElementById('automationResult');
 
-            if (!target || !messagesText) {
-                return alert('Target and Messages are required!');
-            }
+            if (!target || !messagesText) return alert('Target and Messages are required!');
 
             const messages = messagesText.split('\n').map(m => m.trim()).filter(m => m.length > 0);
 
@@ -325,13 +317,7 @@
                 const res = await fetch(`${API_URL}/api/start-automation`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        sessionId: currentSessionId,
-                        target,
-                        prefix,
-                        messages,
-                        speed
-                    })
+                    body: JSON.stringify({ sessionId: currentSessionId, target, prefix, messages, speed })
                 });
                 const data = await res.json();
 
@@ -351,7 +337,6 @@
             }
         }
 
-        // Stop Automation
         async function stopAutomation() {
             if (!currentSessionId) return;
             try {
@@ -367,7 +352,6 @@
             }
         }
 
-        // Load Logs
         async function loadLogs() {
             if (!currentSessionId) {
                 document.getElementById('logsTableBody').innerHTML = '<tr><td colspan="3" style="text-align: center;">Please connect a session first.</td></tr>';
@@ -389,12 +373,9 @@
                 } else {
                     tbody.innerHTML = '<tr><td colspan="3" style="text-align: center;">No logs found.</td></tr>';
                 }
-            } catch (error) {
-                console.error(error);
-            }
+            } catch (error) { console.error(error); }
         }
 
-        // Load Sessions
         async function loadSessions() {
             try {
                 const res = await fetch(`${API_URL}/api/sessions`);
@@ -421,9 +402,7 @@
                 } else {
                     list.innerHTML = '<p style="text-align: center; color: #94a3b8;">No sessions found.</p>';
                 }
-            } catch (error) {
-                console.error(error);
-            }
+            } catch (error) { console.error(error); }
         }
     </script>
 </body>
