@@ -1,17 +1,18 @@
 import express from 'express';
 import fs from 'fs';
 import chalk from 'chalk';
-import {
-  makeWASocket,
+import makeWASocket, {
   useMultiFileAuthState,
   Browsers,
-  fetchLatestBaileysVersion
+  fetchLatestBaileysVersion,
+  DisconnectReason
 } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import sqlite3 from 'sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import cors from 'cors';
+import QRCode from 'qrcode'; // 🔥 QR Code ke liye import kiya
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -79,7 +80,7 @@ db.serialize(() => {
 ================================ */
 
 const sockets = {};
-const pairingCodes = {};
+const qrCodes = {}; // 🔥 OTP ki jagah QR Codes store honge
 const queueTimers = {};
 const queueProcessing = {};
 const connectingSessions = {};
@@ -188,7 +189,9 @@ async function connectWA(phone, sessionId) {
       async (update) => {
 
         const {
-          connection
+          connection,
+          qr, // 🔥 QR String nikal rahe hain
+          lastDisconnect
         } = update;
 
 
@@ -202,6 +205,20 @@ async function connectWA(phone, sessionId) {
             )
           );
 
+        }
+
+        /* 🔥 QR CODE GENERATION LOGIC YAHAN HAI */
+        if (qr) {
+          try {
+            qrCodes[sessionId] = await QRCode.toDataURL(qr, {
+              errorCorrectionLevel: 'M',
+              margin: 2,
+              width: 300
+            });
+            console.log(chalk.cyan(`[${sessionId}] QR Code Generated`));
+          } catch (err) {
+            console.log(chalk.red(`[${sessionId}] QR Error:`), err.message);
+          }
         }
 
 
@@ -226,7 +243,7 @@ async function connectWA(phone, sessionId) {
           );
 
 
-          delete pairingCodes[
+          delete qrCodes[
             sessionId
           ];
 
@@ -308,133 +325,33 @@ async function connectWA(phone, sessionId) {
            * Reconnect after 5 seconds.
            */
 
-          setTimeout(
-            () => {
-
-              connectWA(
-                phone,
-                sessionId
-              ).catch(
-                error => {
-
-                  console.log(
-                    chalk.red(
-                      `[${sessionId}] Reconnect error:`
-                    ),
-                    error.message
-                  );
-
-                }
-              );
-
-            },
-            5000
-          );
+          const statusCode = (lastDisconnect?.error)?.output?.statusCode;
+          
+          if (statusCode !== DisconnectReason.loggedOut) {
+            setTimeout(
+              () => {
+                connectWA(
+                  phone,
+                  sessionId
+                ).catch(
+                  error => {
+                    console.log(
+                      chalk.red(
+                        `[${sessionId}] Reconnect error:`
+                      ),
+                      error.message
+                    );
+                  }
+                );
+              },
+              5000
+            );
+          }
 
         }
 
       }
     );
-
-
-    /* ================================
-       PAIRING CODE
-    ================================= */
-
-    if (
-      !state.creds.registered
-    ) {
-
-      const number =
-        cleanPhone(phone);
-
-
-      if (!number) {
-
-        pairingCodes[
-          sessionId
-        ] = {
-          error:
-            'Invalid phone number'
-        };
-
-      } else {
-
-        console.log(
-          chalk.cyan(
-            `[${sessionId}] Preparing pairing code...`
-          )
-        );
-
-
-        setTimeout(
-          async () => {
-
-            try {
-
-              console.log(
-                chalk.cyan(
-                  `[${sessionId}] Generating pairing code...`
-                )
-              );
-
-
-              const code =
-                await socket.requestPairingCode(
-                  number
-                );
-
-
-              pairingCodes[
-                sessionId
-              ] = code;
-
-
-              console.log(
-                chalk.green(
-                  `================================`
-                )
-              );
-
-              console.log(
-                chalk.green(
-                  `PAIRING CODE: ${code}`
-                )
-              );
-
-              console.log(
-                chalk.green(
-                  `================================`
-                )
-              );
-
-
-            } catch (error) {
-
-              console.log(
-                chalk.red(
-                  `[${sessionId}] Pairing code error:`
-                ),
-                error.message
-              );
-
-
-              pairingCodes[
-                sessionId
-              ] = {
-                error:
-                  error.message
-              };
-
-            }
-
-          },
-          3000
-        );
-
-      }
-
-    }
 
 
     return socket;
@@ -519,7 +436,7 @@ app.post(
         sessionId,
 
         message:
-          'Pairing code is being generated'
+          'QR Code is being generated'
 
       });
 
@@ -545,67 +462,29 @@ app.post(
 
 
 /* ================================
-   PAIRING CODE
+   QR CODE ENDPOINT (Naya)
 ================================ */
 
 app.get(
-  '/api/pairing-code/:sessionId',
+  '/api/qr/:sessionId',
   (req, res) => {
 
-    const sessionId =
-      req.params.sessionId;
+    const sessionId = req.params.sessionId;
+    const qr = qrCodes[sessionId];
 
-
-    const code =
-      pairingCodes[
-        sessionId
-      ];
-
-
-    if (!code) {
+    if (!qr) {
 
       return res.json({
-
         success: false,
-
-        status:
-          'waiting'
-
+        status: 'waiting'
       });
 
     }
-
-
-    if (
-      typeof code === 'object' &&
-      code.error
-    ) {
-
-      return res.json({
-
-        success: false,
-
-        status:
-          'error',
-
-        message:
-          code.error
-
-      });
-
-    }
-
 
     res.json({
-
       success: true,
-
-      status:
-        'ready',
-
-      pairingCode:
-        code
-
+      status: 'ready',
+      qrCode: qr
     });
 
   }
@@ -808,29 +687,6 @@ app.post(
 /* ================================
    QUEUE PROCESSOR
 ================================ */
-
-/*
- * IMPORTANT:
- *
- * There is NO fixed 3-second interval now.
- *
- * Each message has its own "speed"
- * value in seconds.
- *
- * Example:
- *
- * speed = 10
- *
- * Message 1
- *      ↓
- * 10 seconds
- *      ↓
- * Message 2
- *      ↓
- * 10 seconds
- *      ↓
- * Message 3
- */
 
 async function processQueue(
   sessionId
