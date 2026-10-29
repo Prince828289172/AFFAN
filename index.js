@@ -50,10 +50,9 @@ function cleanPhone(phone) {
 }
 
 /* ================================
-   WHATSAPP CONNECTION (Stable)
+   WHATSAPP CONNECTION
 ================================ */
 async function connectWA(phone, sessionId) {
-  // Agar pehle se connect ho raha hai toh wait karo
   if (connectingSessions[sessionId]) return sockets[sessionId];
   connectingSessions[sessionId] = true;
 
@@ -64,13 +63,8 @@ async function connectWA(phone, sessionId) {
     const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
     const { version } = await fetchLatestBaileysVersion();
 
-    // 🔥 STABILITY FIX: Purane socket ko clean karo taaki conflict na ho
     if (sockets[sessionId]) {
-      try {
-        sockets[sessionId].ev.removeAllListeners();
-        sockets[sessionId].end(undefined);
-        delete sockets[sessionId];
-      } catch (e) {}
+      try { sockets[sessionId].ev.removeAllListeners(); sockets[sessionId].end(undefined); delete sockets[sessionId]; } catch (e) {}
     }
 
     const socket = makeWASocket({
@@ -80,13 +74,8 @@ async function connectWA(phone, sessionId) {
       auth: state,
       printQRInTerminal: false,
       markOnlineOnConnect: true,
-      generateHighQualityLinkPreview: false,
-      syncFullHistory: false,
-      keepAliveIntervalMs: 30000, // Connection alive rakhne ke liye
-      connectTimeoutMs: 60000,
-      defaultQueryTimeoutMs: 60000,
-      // 🔥 FIX: Multi-device conflict se bachne ke liye
-      getMessage: async () => { return { conversation: 'Wait' } }
+      keepAliveIntervalMs: 30000,
+      connectTimeoutMs: 60000
     });
 
     sockets[sessionId] = socket;
@@ -96,17 +85,13 @@ async function connectWA(phone, sessionId) {
     socket.ev.on('connection.update', async (update) => {
       const { connection, qr, lastDisconnect } = update;
 
-      if (connection === 'connecting') {
-        console.log(chalk.yellow(`[${sessionId}] WhatsApp connecting...`));
-      }
+      if (connection === 'connecting') console.log(chalk.yellow(`[${sessionId}] WhatsApp connecting...`));
 
       if (qr) {
         try {
           qrCodes[sessionId] = await QRCode.toDataURL(qr, { errorCorrectionLevel: 'M', margin: 2, width: 300 });
           console.log(chalk.cyan(`[${sessionId}] QR Code Generated`));
-        } catch (err) {
-          console.log(chalk.red(`[${sessionId}] QR Error:`), err.message);
-        }
+        } catch (err) { console.log(chalk.red(`[${sessionId}] QR Error:`), err.message); }
       }
 
       if (connection === 'open') {
@@ -114,43 +99,32 @@ async function connectWA(phone, sessionId) {
         db.run(`UPDATE sessions SET isConnected = 1 WHERE id = ?`, [sessionId]);
         delete qrCodes[sessionId];
         delete connectingSessions[sessionId];
-        
-        // Queue start karo jab connection open ho
         processQueue(sessionId);
       }
 
       if (connection === 'close') {
         const statusCode = lastDisconnect?.error?.output?.statusCode;
-        const errorMessage = lastDisconnect?.error?.message || 'Unknown';
-        console.log(chalk.red(`[${sessionId}] ⚠️ Connection Closed. Reason: ${statusCode} (${errorMessage})`));
-        
+        console.log(chalk.red(`[${sessionId}] ⚠️ Connection Closed. Reason: ${statusCode}`));
         db.run(`UPDATE sessions SET isConnected = 0 WHERE id = ?`, [sessionId]);
         
-        if (queueTimers[sessionId]) {
-          clearTimeout(queueTimers[sessionId]);
-          delete queueTimers[sessionId];
-        }
+        if (queueTimers[sessionId]) { clearTimeout(queueTimers[sessionId]); delete queueTimers[sessionId]; }
         queueProcessing[sessionId] = false;
 
-        // 🔥 STABILITY FIX: 515 (Restart Required) ya 428 (Connection Closed) par turant reconnect karo
-        if (statusCode === DisconnectReason.restartRequired || statusCode === 515 || statusCode === 428 || statusCode === 408) {
-          console.log(chalk.yellow(`[${sessionId}] 🔄 Fast Reconnecting (Code: ${statusCode})...`));
+        if (statusCode === DisconnectReason.restartRequired || statusCode === 515 || statusCode === 428) {
+          console.log(chalk.yellow(`[${sessionId}] 🔄 Fast Reconnecting...`));
           delete connectingSessions[sessionId];
-          setTimeout(() => connectWA(phone, sessionId), 1000); // 1 second baad turant wapas
-        } 
-        else if (statusCode !== DisconnectReason.loggedOut) {
+          setTimeout(() => connectWA(phone, sessionId), 1000);
+        } else if (statusCode !== DisconnectReason.loggedOut) {
           console.log(chalk.yellow(`[${sessionId}] 🔄 Reconnecting in 5 seconds...`));
           delete connectingSessions[sessionId];
           setTimeout(() => connectWA(phone, sessionId), 5000);
-        } 
-        else {
-          console.log(chalk.red(`[${sessionId}] 🚨 Logged Out. Please scan QR again.`));
+        } else {
+          console.log(chalk.red(`[${sessionId}] 🚨 Logged Out.`));
           delete sockets[sessionId];
           delete connectingSessions[sessionId];
         }
       }
     });
-
     return socket;
   } catch (error) {
     delete connectingSessions[sessionId];
@@ -183,6 +157,7 @@ app.get('/api/qr/:sessionId', (req, res) => {
   res.json({ success: true, status: 'ready', qrCode: qr });
 });
 
+// 🔥 FIX: Start Automation (Database write completion wait karega)
 app.post('/api/start-automation', (req, res) => {
   const { sessionId, target, prefix = '', messages = [], speed = 5 } = req.body;
   if (!sessionId || !target || !Array.isArray(messages) || messages.length === 0) {
@@ -193,12 +168,22 @@ app.post('/api/start-automation', (req, res) => {
   if (pending.length === 0) return res.json({ success: false, message: 'No valid messages' });
 
   const delaySeconds = Math.max(1, Number(speed) || 5);
+  let insertedCount = 0;
 
   pending.forEach(message => {
-    db.run(`INSERT INTO messageQueue (sessionId, target, prefix, message, speed, isActive, sentCount) VALUES (?, ?, ?, ?, ?, 1, 0)`, [sessionId, String(target).trim(), prefix, String(message), delaySeconds]);
+    db.run(`INSERT INTO messageQueue (sessionId, target, prefix, message, speed, isActive, sentCount) VALUES (?, ?, ?, ?, ?, 1, 0)`, 
+    [sessionId, String(target).trim(), prefix, String(message), delaySeconds], 
+    (err) => {
+      if (err) console.log("Queue Insert Error:", err);
+      insertedCount++;
+      // 🔥 Jab saare messages DB mein save ho jayein, tabhi Queue start karo
+      if (insertedCount === pending.length) {
+        console.log(chalk.blue(`[${sessionId}] ${pending.length} messages added to DB. Starting Queue...`));
+        processQueue(sessionId);
+      }
+    });
   });
 
-  processQueue(sessionId);
   res.json({ success: true, message: `${pending.length} message(s) queued`, delay: delaySeconds });
 });
 
@@ -208,10 +193,7 @@ app.post('/api/stop-automation', (req, res) => {
 
   db.run(`UPDATE messageQueue SET isActive = 0 WHERE sessionId = ?`, [sessionId]);
 
-  if (queueTimers[sessionId]) {
-    clearTimeout(queueTimers[sessionId]);
-    delete queueTimers[sessionId];
-  }
+  if (queueTimers[sessionId]) { clearTimeout(queueTimers[sessionId]); delete queueTimers[sessionId]; }
   queueProcessing[sessionId] = false;
   res.json({ success: true, message: 'Automation stopped' });
 });
@@ -226,34 +208,35 @@ async function processQueue(sessionId) {
   try {
     const socket = sockets[sessionId];
 
-    // Agar socket connected nahi hai, toh wait karo
     if (!socket) {
-      console.log(chalk.yellow(`[${sessionId}] Socket not ready. Waiting for connection...`));
+      console.log(chalk.red(`[${sessionId}] ⏸️ Queue paused: Socket not connected yet.`));
       queueProcessing[sessionId] = false;
       return;
     }
 
     db.get(`SELECT * FROM messageQueue WHERE sessionId = ? AND isActive = 1 ORDER BY id ASC LIMIT 1`, [sessionId], async (error, item) => {
-      if (error || !item) {
+      if (error) {
+        console.log("DB Fetch Error:", error);
+        queueProcessing[sessionId] = false;
+        return;
+      }
+
+      if (!item) {
+        console.log(chalk.gray(`[${sessionId}] Queue empty or stopped. Waiting...`));
         queueProcessing[sessionId] = false;
         return;
       }
 
       try {
         const target = String(item.target || '').trim();
-        if (!target) {
-          db.run(`UPDATE messageQueue SET isActive = 0 WHERE id = ?`, [item.id], () => {
-            queueProcessing[sessionId] = false;
-            processQueue(sessionId);
-          });
-          return;
-        }
-
         const chatId = target.endsWith('@g.us') ? target : `${cleanPhone(target)}@s.whatsapp.net`;
         const fullMsg = `${item.prefix || ''} ${item.message}`.trim();
 
-        console.log(chalk.cyan(`[${sessionId}] Sending message #${item.id} to ${target}...`));
+        // 🔥 DEBUG LOG: Pata chale message send ho raha hai
+        console.log(chalk.cyan(`[${sessionId}] 📤 Sending message #${item.id} to ${chatId}...`));
+        
         await socket.sendMessage(chatId, { text: fullMsg });
+        
         console.log(chalk.green(`[${sessionId}] ✅ Message sent successfully!`));
 
         db.run(`INSERT INTO sentLogs (sessionId, target, message) VALUES (?, ?, ?)`, [sessionId, target, fullMsg]);
