@@ -1,7 +1,8 @@
 import express from 'express';
 import fs from 'fs';
 import chalk from 'chalk';
-import makeWASocket, {
+import {
+  makeWASocket,
   useMultiFileAuthState,
   Browsers,
   fetchLatestBaileysVersion
