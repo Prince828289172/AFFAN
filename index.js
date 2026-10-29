@@ -1,7 +1,9 @@
 import express from 'express';
 import fs from 'fs';
 import chalk from 'chalk';
-import makeWASocket, {
+// 🔥 YAHAN FIX KIYA HAI (Curly braces me daala)
+import { 
+  makeWASocket,
   useMultiFileAuthState,
   Browsers,
   fetchLatestBaileysVersion,
@@ -12,7 +14,7 @@ import sqlite3 from 'sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import cors from 'cors';
-import QRCode from 'qrcode'; // 🔥 QR Code ke liye import kiya
+import QRCode from 'qrcode';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -80,7 +82,7 @@ db.serialize(() => {
 ================================ */
 
 const sockets = {};
-const qrCodes = {}; // 🔥 OTP ki jagah QR Codes store honge
+const qrCodes = {};
 const queueTimers = {};
 const queueProcessing = {};
 const connectingSessions = {};
@@ -190,7 +192,7 @@ async function connectWA(phone, sessionId) {
 
         const {
           connection,
-          qr, // 🔥 QR String nikal rahe hain
+          qr,
           lastDisconnect
         } = update;
 
@@ -207,7 +209,6 @@ async function connectWA(phone, sessionId) {
 
         }
 
-        /* 🔥 QR CODE GENERATION LOGIC YAHAN HAI */
         if (qr) {
           try {
             qrCodes[sessionId] = await QRCode.toDataURL(qr, {
@@ -253,12 +254,6 @@ async function connectWA(phone, sessionId) {
           ];
 
 
-          /*
-           * Start queue.
-           * Processor itself controls
-           * the exact message delay.
-           */
-
           processQueue(
             sessionId
           );
@@ -297,10 +292,6 @@ async function connectWA(phone, sessionId) {
           ];
 
 
-          /*
-           * Clear pending timer.
-           */
-
           if (
             queueTimers[sessionId]
           ) {
@@ -320,10 +311,6 @@ async function connectWA(phone, sessionId) {
             sessionId
           ] = false;
 
-
-          /*
-           * Reconnect after 5 seconds.
-           */
 
           const statusCode = (lastDisconnect?.error)?.output?.statusCode;
           
@@ -462,7 +449,7 @@ app.post(
 
 
 /* ================================
-   QR CODE ENDPOINT (Naya)
+   QR CODE ENDPOINT
 ================================ */
 
 app.get(
@@ -586,12 +573,6 @@ app.post(
       }
     );
 
-
-    /*
-     * Start processor immediately.
-     * It will respect each item's
-     * configured delay.
-     */
 
     processQueue(
       sessionId
@@ -800,11 +781,6 @@ async function processQueue(
           }
 
 
-          /*
-           * NUMBER = @s.whatsapp.net
-           * GROUP  = @g.us
-           */
-
           const chatId =
             target.endsWith('@g.us')
               ? target
@@ -823,10 +799,6 @@ async function processQueue(
           );
 
 
-          /*
-           * ACTUAL SEND
-           */
-
           await socket.sendMessage(
             chatId,
             {
@@ -841,10 +813,6 @@ async function processQueue(
             )
           );
 
-
-          /*
-           * SAVE LOG
-           */
 
           db.run(
             `
@@ -864,10 +832,6 @@ async function processQueue(
           );
 
 
-          /*
-           * UPDATE SESSION COUNT
-           */
-
           db.run(
             `
             UPDATE sessions
@@ -878,10 +842,6 @@ async function processQueue(
             [sessionId]
           );
 
-
-          /*
-           * MARK CURRENT MESSAGE COMPLETE
-           */
 
           db.run(
             `
@@ -899,13 +859,6 @@ async function processQueue(
                 sessionId
               ] = false;
 
-
-              /*
-               * IMPORTANT:
-               *
-               * Wait exactly the number
-               * of seconds selected by user.
-               */
 
               const delaySeconds =
                 Math.max(
@@ -956,11 +909,6 @@ async function processQueue(
           );
 
 
-          /*
-           * Failed message is stopped
-           * so it doesn't retry endlessly.
-           */
-
           db.run(
             `
             UPDATE messageQueue
@@ -974,11 +922,6 @@ async function processQueue(
                 sessionId
               ] = false;
 
-
-              /*
-               * Continue with next queued
-               * message after a small delay.
-               */
 
               queueTimers[
                 sessionId
