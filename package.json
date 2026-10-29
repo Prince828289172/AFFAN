@@ -8,12 +8,7 @@
     "start": "node index.js",
     "dev": "nodemon index.js"
   },
-  "keywords": [
-    "whatsapp",
-    "automation",
-    "baileys",
-    "sqlite"
-  ],
+  "keywords": ["whatsapp", "automation", "baileys", "sqlite"],
   "author": "",
   "license": "ISC",
   "dependencies": {
@@ -22,6 +17,7 @@
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "pino": "^9.5.0",
+    "qrcode": "^1.5.4",
     "sqlite3": "^5.1.7"
   }
 }
